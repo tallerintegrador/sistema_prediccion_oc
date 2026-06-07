@@ -1,0 +1,9 @@
+==== LOG DE INGESTA (ETL) ====
+Archivos encontrados : 53
+Archivos leídos      : 53
+Archivos omitidos    : ninguno
+Meses cubiertos      : 53 (202201 a 202605)
+Filas totales        : 483,889
+Codificaciones       : {'latin-1': 52, 'utf-8': 1}
+Conjuntos de columnas: 1
+Todos los archivos comparten el mismo conjunto de columnas.

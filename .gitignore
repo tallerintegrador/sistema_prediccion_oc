@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Artefactos regenerables grandes (se reconstruyen con `python main.py`)
+outputs/resultados/*.parquet
+outputs/modelos/*.pkl
+outputs/modelos/*.json
+
+# Sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,21 @@
+# Dependencias del SistemaPrediccionOC - Módulo A (pronóstico del gasto)
+# Versiones verificadas con Python 3.14 en Windows.
+# Instalación:  pip install -r requirements.txt
+
+# --- Manejo de datos ---
+pandas==3.0.3
+numpy==2.4.6
+pyarrow==24.0.0          # lectura/escritura de parquet
+
+# --- Visualización ---
+matplotlib==3.10.9
+seaborn==0.13.2
+
+# --- Modelado estadístico y de ML ---
+scikit-learn==1.8.0
+statsmodels==0.14.6      # SARIMA y descomposición de series
+xgboost==3.2.0           # modelo de árboles de gradiente
+scipy==1.17.1            # utilidades estadísticas (intervalos)
+
+# --- Red neuronal (LSTM) ---
+torch==2.12.0            # PyTorch (CPU); el instalador resuelve la build adecuada
