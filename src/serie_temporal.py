@@ -46,6 +46,44 @@ def construir_serie_total(df: pd.DataFrame) -> pd.DataFrame:
     return agg
 
 
+def construir_serie_diaria(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Serie de gasto a granularidad **diaria** (rango continuo, días sin órdenes = 0).
+
+    Convierte las ~480 mil transacciones en ~1 600 puntos (vs. ~50 mensuales),
+    recuperando el tamaño muestral que ahogaba a los modelos de ML/DL y permitiendo
+    aprender el calendario (días hábiles, feriados, patrón intra-mes) directamente.
+    """
+    return _agregar_por_periodo(df, "D")
+
+
+def construir_serie_semanal(df: pd.DataFrame) -> pd.DataFrame:
+    """Serie de gasto a granularidad **semanal** (~230 puntos)."""
+    return _agregar_por_periodo(df, "W")
+
+
+def _agregar_por_periodo(df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    """
+    Agrega el gasto por periodo `freq` ('D' diario, 'W' semanal) sobre
+    `FECHA_FORMALIZACION`, con índice continuo (periodos sin órdenes = 0). Misma
+    lógica que `construir_serie_total` pero parametrizada por frecuencia.
+    """
+    s = df.dropna(subset=[config.COL_FECHA_FORMALIZACION]).copy()
+    fecha = s[config.COL_FECHA_FORMALIZACION].dt.normalize()
+    agg = (
+        s.assign(_f=fecha)
+        .groupby("_f")
+        .agg(gasto=(config.COL_TOTAL, "sum"), ordenes=(config.COL_TOTAL, "size"))
+    )
+    idx = pd.date_range(agg.index.min(), agg.index.max(), freq="D")
+    agg = agg.reindex(idx, fill_value=0)
+    if freq != "D":
+        agg = agg.resample(freq).sum()
+    agg.index.name = "fecha"
+    agg["ticket_promedio"] = (agg["gasto"] / agg["ordenes"]).where(agg["ordenes"] > 0, 0)
+    return agg
+
+
 def detectar_meses_incompletos(serie: pd.DataFrame) -> dict:
     """
     Detecta, de forma automática y a partir de los propios datos, si los últimos

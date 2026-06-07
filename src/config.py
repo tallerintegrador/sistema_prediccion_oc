@@ -85,6 +85,27 @@ MESES_HOLDOUT: int = 6            # meses reservados para prueba (los más recie
 HORIZONTE_PRONOSTICO: int = 6     # meses a pronosticar hacia adelante
 NIVEL_CONFIANZA: float = 0.95     # nivel para los intervalos de confianza
 
+# Métrica primaria para seleccionar el mejor modelo (menor es mejor). Se elige
+# WAPE (MAPE ponderado por monto) por ser robusta al trough de enero, donde el
+# MAPE explota al dividir entre un denominador casi-cero. Ver evaluacion.py.
+METRICA_PRIMARIA: str = "WAPE"
+
+# Backtesting con origen móvil (rolling/expanding origin). Más robusto que un
+# holdout único: promedia el error sobre varios orígenes de pronóstico.
+BACKTEST_N_ORIGENES: int = 6      # nº de orígenes de evaluación
+BACKTEST_PASO: int = 1            # meses entre orígenes consecutivos
+
+# Objetivo de los modelos de árboles de gradiente. El gasto es no-negativo y de
+# cola larga; "tweedie" optimiza un error de tipo relativo (proxy del MAPE/WAPE)
+# mejor que el error cuadrático por defecto. Alternativa: "log" (entrenar sobre
+# log1p del objetivo). Ver modelos.py.
+OBJETIVO_GBM: str = "tweedie"
+TWEEDIE_VARIANCE_POWER: float = 1.3
+
+# País para el calendario de feriados (días hábiles por mes). 'PE' = Perú.
+PAIS_FERIADOS: str = "PE"
+N_ARMONICOS_FOURIER: int = 3      # nº de armónicos para la estacionalidad anual
+
 # Umbral para la detección automática de meses incompletos en la cola:
 # si el conteo de órdenes de un mes de la cola es menor a esta fracción de su
 # valor esperado (mismo mes del año anterior), se considera incompleto.

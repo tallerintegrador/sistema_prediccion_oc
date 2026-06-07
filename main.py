@@ -89,7 +89,7 @@ def main() -> None:
 
     # 5-6) MODELADO Y EVALUACIÓN -------------------------------------------
     log.info("== 5/6 Modelado y 6/6 Evaluación ==")
-    md_modelos, resultados = evaluacion.ejecutar_evaluacion(serie_total)
+    md_modelos, resultados = evaluacion.ejecutar_evaluacion(serie_total, df_limpio)
 
     # INFORME FINAL ---------------------------------------------------------
     informe = (

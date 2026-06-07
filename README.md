@@ -87,10 +87,11 @@ SistemaPrediccionOC/
 │   ├── config.py              # rutas y parámetros centrales
 │   ├── ingesta.py             # lectura y consolidación de los CSV (ETL)
 │   ├── limpieza.py            # limpieza y validación
-│   ├── serie_temporal.py      # construcción de la serie mensual
+│   ├── serie_temporal.py      # series mensual / semanal / diaria
+│   ├── features.py            # features de calendario (días hábiles, feriados, Fourier)
 │   ├── eda.py                 # análisis exploratorio y figuras
-│   ├── modelos.py             # naive, SARIMA, XGBoost, LSTM
-│   └── evaluacion.py          # métricas, comparación y pronóstico final
+│   ├── modelos.py             # naive(+drift), SARIMA, ETS, Ensemble, XGBoost/LightGBM, descompuesto, LSTM, Transformer
+│   └── evaluacion.py          # métricas (WAPE/MASE/…), backtest de origen móvil y pronóstico
 ├── notebooks/
 │   └── flujo_completo.ipynb   # (opcional) recorrido guiado del flujo
 ├── outputs/
@@ -108,7 +109,8 @@ SistemaPrediccionOC/
 
 - **Python 3.11+** (desarrollado y probado en Python 3.14, Windows 11).
 - Las librerías de `requirements.txt` (pandas, numpy, matplotlib, seaborn,
-  scikit-learn, statsmodels, xgboost, scipy, torch, pyarrow).
+  scikit-learn, statsmodels, xgboost, lightgbm, optuna, holidays, scipy, torch,
+  pyarrow).
 
 ---
 
@@ -162,36 +164,38 @@ Sobre los **53 meses** (ene-2022 a may-2026), el gasto total acumulado es de
 **estacionalidad anual marcada** (enero el más bajo) y una tendencia de fondo
 identificable.
 
-Se reservaron los **últimos 6 meses** como prueba (holdout) y se compararon cinco
-modelos. Métricas sobre el holdout:
+La evaluación usa **validación de origen móvil** (rolling-origin, 6 orígenes,
+horizonte 6 meses) y como métrica primaria el **WAPE** (error absoluto ponderado
+por monto) y el **MASE**, ambos robustos al *trough* de enero (gasto casi-cero
+donde el MAPE explota). Métricas medias del backtest (extracto):
 
-| Modelo | MAE (S/) | RMSE (S/) | MAPE (%) |
+| Modelo | WAPE (%) | MASE | MAPE (%) |
 |---|---|---|---|
-| **SARIMA** ⭐ | 16.6 M | 20.1 M | **30.8** |
-| Naive estacional | 18.8 M | 24.6 M | 33.1 |
-| XGBoost | 29.3 M | 32.8 M | 50.2 |
-| LSTM | 72.3 M | 88.3 M | 81.8 |
-| Naive | 113.4 M | 124.6 M | 435.0 |
+| **Ensemble** ⭐ (mediana ETS+drift+SARIMA) | **16.5** | **0.75** | 28.0 |
+| ETS (Holt-Winters) | 17.4 | 0.78 | 24.4 |
+| Estacional drift | 18.0 | 0.84 | 29.4 |
+| Naive estacional | 19.0 | 0.86 | 32.3 |
+| SARIMA | 19.5 | 0.89 | 33.0 |
+| LightGBM (calendario, Tweedie) | 20.9 | 0.93 | 46.7 |
+| LSTM | 38.9 | 1.66 | 66.2 |
+| Transformer | 47.5 | 2.05 | 206.5 |
 
 **Conclusiones:**
 
-- El mejor modelo es **SARIMA** (menor RMSE y MAPE), que captura bien la
-  estacionalidad anual. Supera incluso al *naive estacional*, una referencia
-  exigente en esta serie.
-- El **naive simple** falla por completo (MAPE 435%): al repetir el último valor,
-  no anticipa la caída de enero. Esto evidencia la importancia del componente
-  estacional.
-- **XGBoost** y **LSTM** quedan por detrás: con solo ~4 años de historia mensual
-  hay muy pocos ejemplos para que un árbol de gradiente o una red neuronal
-  generalicen; es una limitación de **datos**, no de implementación.
-- El **pronóstico a 6 meses** (jun–nov 2026) proyecta un gasto acumulado de
-  **~S/ 1,043 millones**, reproduciendo el patrón estacional, con su intervalo de
-  confianza al 95%.
-
-En términos prácticos, el error del mejor modelo (~15% del gasto mensual promedio
-en MAE) es **adecuado para planificación presupuestal agregada**, no para predecir
-órdenes individuales. El desempeño debería mejorar conforme se acumule más
-historia mensual.
+- El mejor modelo es un **Ensemble** (mediana de ETS, naive-estacional-con-drift y
+  SARIMA): **WAPE 16.5%, MASE 0.75** (un MASE < 1 supera al naive estacional).
+- **Los modelos complejos pierden frente a los simples** (LightGBM/XGBoost y, sobre
+  todo, LSTM/Transformer): con ~50 puntos mensuales hay inanición de datos. No es
+  un problema de implementación sino de **información disponible**.
+- **Granularidad fina no ayuda**: modelar a nivel diario o semanal y agregar a
+  mensual da WAPE 28.8% / 35.1% (peor), porque la agregación reacumula la
+  incertidumbre. Útil para el calendario, no para bajar el error mensual.
+- **El objetivo de error < 10% no se alcanza** con los datos disponibles (techo
+  empírico ~16.5%, igual en mensual/semanal/diario). Para romperlo hace falta más
+  **señal**: variables exógenas (presupuesto PIA/PIM, calendario de ejecución),
+  más historia o un modelo global por categoría. Detalle en el informe.
+- El **pronóstico a 6 meses** (jun–nov 2026) proyecta ~**S/ 1,038 millones**, con
+  intervalo de confianza al 95%.
 
 > El detalle completo, con todas las figuras e interpretaciones, está en
 > [`outputs/resultados/informe_resultados.md`](outputs/resultados/informe_resultados.md).

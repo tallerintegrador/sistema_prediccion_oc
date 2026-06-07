@@ -1,6 +1,6 @@
 # Informe de Resultados — Módulo A: Pronóstico del Gasto en Órdenes de Compra
 
-_Sistema de Predicción de Órdenes de Compra (SistemaPrediccionOC). Generado el 2026-06-07 00:09._
+_Sistema de Predicción de Órdenes de Compra (SistemaPrediccionOC). Generado el 2026-06-07 01:13._
 
 ## 1. Introducción
 
@@ -82,42 +82,83 @@ _La detección de incompletitud compara, mes a mes desde el final, el número de
 
 
 ## 3. Modelado del pronóstico
-Se reservaron los **últimos 6 meses** como conjunto de prueba (holdout) y se entrenó con los anteriores. Se compararon 5 modelos: un naive simple y un naive estacional (referencias), un modelo estadístico SARIMA, un modelo de árboles XGBoost con variables temporales y una red neuronal LSTM. Todas las semillas se fijaron en 42 para reproducibilidad.
+Los modelos se evaluaron con **validación de origen móvil** (rolling-origin) sobre **6 orígenes**, cada uno con horizonte de 6 meses: se entrena con todo lo anterior y se promedia el error entre orígenes. Esto es más robusto que un holdout único, que con esta serie contiene un solo enero y tiene alta varianza. Todas las semillas se fijaron en 42 para reproducibilidad.
+
+La **métrica primaria de selección es WAPE** (error absoluto ponderado por monto, Σ|e|/Σ|y|) y **MASE** (error relativo al naive estacional). Ambas son robustas al *trough* de enero, donde el MAPE explota por dividir entre un denominador casi-cero (~S/ 10 M frente a ~S/ 150 M de media). El MAPE y el sMAPE se reportan como secundarios.
 
 El SARIMA seleccionado automáticamente por AIC fue **SARIMA(1, 0, 0)x(0, 1, 0, 12)**.
 
-### 3.1 Comparación de modelos (holdout)
+### 3.1 Comparación de modelos (backtesting de origen móvil)
 
-| Modelo | MAE (S/) | RMSE (S/) | MAPE (%) |
-|---|---|---|---|
-| SARIMA ⭐ | 16,645,734 | 20,131,214 | 30.8 |
-| Naive estacional | 18,822,269 | 24,562,604 | 33.1 |
-| XGBoost | 29,297,718 | 32,753,480 | 50.2 |
-| LSTM | 72,282,351 | 88,277,845 | 81.8 |
-| Naive | 113,419,603 | 124,580,430 | 435.0 |
+| Modelo | WAPE (%) | MASE | MAPE (%) | sMAPE (%) | MAE (S/) | RMSE (S/) | MPE (%) |
+|---|---|---|---|---|---|---|---|
+| Ensemble ⭐ | 16.5 | 0.75 | 28.0 | 23.6 | 24,319,489 | 28,985,223 | -13.5 |
+| ETS | 17.4 | 0.78 | 24.4 | 21.5 | 25,302,705 | 30,768,096 | -13.8 |
+| Estacional drift | 18.0 | 0.84 | 29.4 | 26.2 | 27,030,989 | 33,631,720 | -6.4 |
+| Naive estacional | 19.0 | 0.86 | 32.3 | 25.9 | 27,870,309 | 32,462,753 | -18.0 |
+| SARIMA | 19.5 | 0.89 | 33.0 | 26.2 | 28,713,065 | 33,198,770 | -20.3 |
+| LightGBM | 20.9 | 0.93 | 46.7 | 30.5 | 30,125,818 | 33,156,464 | -33.4 |
+| Descompuesto | 21.4 | 0.96 | 53.9 | 33.1 | 31,072,158 | 37,137,781 | -38.8 |
+| XGBoost | 24.4 | 1.09 | 51.0 | 36.8 | 35,201,961 | 39,555,994 | -28.6 |
+| LSTM | 38.9 | 1.66 | 66.2 | 41.4 | 53,607,271 | 62,937,146 | -57.6 |
+| Transformer | 47.5 | 2.05 | 206.5 | 58.8 | 66,125,553 | 79,402,712 | -170.0 |
+| Naive | 57.1 | 2.39 | 302.0 | 55.8 | 77,267,664 | 92,367,305 | -284.1 |
 
 ![Comparación en el holdout](../figuras/09_holdout_real_vs_modelos.png)
 
-_El mejor modelo es **SARIMA** (menor RMSE). Sobre el holdout alcanza un MAPE de **30.8%** y un MAE de **S/ 16.65 millones**, equivalente a un **15.3%** del gasto mensual promedio del periodo de prueba (S/ 109.0M). En términos prácticos, el modelo anticipa el gasto mensual con un error típico de ese orden, suficiente para planificación presupuestal agregada aunque no para el detalle de una orden individual._
+![Error por mes](../figuras/11_error_por_mes.png)
 
-### 3.2 Pronóstico hacia adelante
-Con **SARIMA** reentrenado sobre toda la serie se pronostican los próximos **6 meses** (2026-06 a 2026-11), con intervalo de confianza al 95%.
+_El heatmap confirma el diagnóstico: **enero concentra el grueso del error porcentual** en todos los modelos (denominador casi-cero), mientras que el resto del año es mucho más predecible. Por eso WAPE/MASE describen mejor el valor real del modelo para la planificación presupuestal agregada._
+
+_El mejor modelo es **Ensemble** (menor WAPE). En el backtest alcanza **WAPE 16.5%**, **MASE 0.75** (un MASE < 1 indica que supera al naive estacional) y un MAE de **S/ 24.32 millones** (~22.3% del gasto mensual medio). Su MAPE es **28.0%**, inflado por enero como se explicó._
+
+### 3.2 Comparación de granularidades (diaria/semanal → mensual)
+
+Se entrenaron modelos LightGBM a nivel **diario** y **semanal** (recuperando tamaño muestral: de ~50 puntos mensuales a ~1 600 diarios) y se agregaron sus pronósticos a mensual para medirlos con la misma vara.
+
+| Enfoque | WAPE (%) | MASE | MAPE (%) | MPE (%) |
+|---|---|---|---|---|
+| Diario→mensual (LightGBM) | 28.8 | 1.10 | 34.0 | -24.9 |
+| Semanal→mensual (LightGBM) | 35.1 | 1.44 | 64.6 | -33.7 |
+
+_Recuperar tamaño muestral con granularidad fina **no rompe el techo del error**: agregar a mensual reacumula la incertidumbre diaria. El mejor enfoque sigue siendo el mensual (**Ensemble**, WAPE 16.5%). La granularidad fina es útil para el calendario y el análisis intra-mes, no para bajar el error mensual._
+
+### 3.3 ¿Redes neuronales? Justificación del trade-off
+Se incluyeron una **LSTM** (WAPE 38.9%) y un **Transformer** (WAPE 47.5%) sobre la serie única. Ambos quedan **muy por detrás** del mejor modelo estadístico (**Ensemble**, WAPE 16.5%), confirmando el diagnóstico:
+
+- Con ~50 puntos mensuales, una red tiene más parámetros que muestras → **sobreajuste** garantizado. El Transformer, sin sesgo inductivo temporal, es el peor de todos.
+- A nivel diario (~1 600 puntos) una red se vuelve entrenable, pero los árboles de gradiente con calendario siguen siendo el baseline a batir, a ~1/100 del costo (CPU/minutos vs. GPU/horas) y con mejor interpretabilidad (SHAP).
+- El **único** escenario donde el Deep Learning sería claramente superior es un **modelo global** que aprenda de las ~95 categorías (`ACUERDO_MARCO`) a la vez (DeepAR/TFT/N-BEATS global): ahí 95 × ~1 600 ≈ 150 mil secuencias sí justifican la capacidad. Es la vía recomendada a futuro, no para esta serie agregada.
+
+**Conclusión:** para reducir el error, la palanca son los **datos y las features**, no la capacidad de la red.
+
+### 3.4 Pronóstico hacia adelante
+Con **Ensemble** reentrenado sobre toda la serie se pronostican los próximos **6 meses** (2026-06 a 2026-11), con intervalo de confianza al 95%.
 
 | Mes | Pronóstico (S/) | Límite inferior | Límite superior |
 |---|---|---|---|
-| 2026-06 | 131,392,861 | 79,835,591 | 216,245,458 |
-| 2026-07 | 161,601,233 | 97,332,717 | 268,306,065 |
-| 2026-08 | 129,890,892 | 78,209,353 | 215,724,120 |
-| 2026-09 | 184,289,296 | 110,962,271 | 306,072,905 |
-| 2026-10 | 200,796,261 | 120,901,219 | 333,488,271 |
-| 2026-11 | 234,933,174 | 141,455,357 | 390,183,855 |
+| 2026-06 | 131,392,861 | 74,582,867 | 188,202,854 |
+| 2026-07 | 161,601,228 | 104,791,234 | 218,411,222 |
+| 2026-08 | 129,890,892 | 73,080,899 | 186,700,886 |
+| 2026-09 | 184,289,292 | 127,479,299 | 241,099,286 |
+| 2026-10 | 200,796,257 | 143,986,264 | 257,606,251 |
+| 2026-11 | 229,712,994 | 172,903,001 | 286,522,988 |
 
 ![Pronóstico final](../figuras/10_pronostico_final.png)
 
-_Se proyecta un gasto acumulado de **S/ 1,043 millones** en los próximos 6 meses. El pronóstico reproduce el patrón estacional histórico (meses altos y bajos) y el intervalo de confianza refleja la incertidumbre: cuanto más ancho, mayor variabilidad esperada. Conviene recalibrar el modelo a medida que ingresen nuevos meses de datos._
+_Se proyecta un gasto acumulado de **S/ 1,038 millones** en los próximos 6 meses. El pronóstico reproduce el patrón estacional histórico (meses altos y bajos) y el intervalo de confianza refleja la incertidumbre: cuanto más ancho, mayor variabilidad esperada. Conviene recalibrar el modelo a medida que ingresen nuevos meses de datos._
 
 ## 4. Conclusiones del Módulo A
-- El gasto en órdenes de compra de los Acuerdos Marco muestra una **estacionalidad anual fuerte** (mínimos en enero–febrero) y una tendencia de fondo identificable.
-- Entre los modelos probados, **SARIMA** ofreció el mejor equilibrio en el holdout (MAPE 30.8%).
-- La principal limitación es la **longitud de la serie** (pocos años de historia mensual), que restringe especialmente a la LSTM; con más historia el desempeño podría mejorar.
+- El gasto en órdenes de compra de los Acuerdos Marco muestra una **estacionalidad anual fuerte** (mínimos en enero–febrero) y una tendencia de fondo a la baja.
+- Bajo backtesting de origen móvil, **Ensemble** es el mejor modelo (WAPE 16.5%, MASE 0.75): con él **no se alcanza** el objetivo de error < 10% con los datos disponibles.
+- **Enero es el límite estructural del MAPE**: su gasto casi-cero hace que cualquier error absoluto pequeño se traduzca en un error porcentual enorme. Por eso la métrica de negocio es WAPE/MASE, no el MAPE.
+
+**Diagnóstico de por qué el error no baja de ~16.5%** (techo empírico, igual en granularidad mensual, semanal y diaria): el límite **no es el algoritmo** (los modelos complejos pierden frente a los simples), sino la **información disponible**. La serie agregada solo conoce su propio pasado, y el gasto público depende de factores exógenos que no están en los datos.
+
+**Para romper el 10% se necesita más SEÑAL, no más modelo:**
+1. **Variables exógenas**: presupuesto asignado por entidad (PIA/PIM), calendario de ejecución, licitaciones en curso, indicadores macro. Es la palanca de mayor impacto.
+2. **Más historia** (la serie tiene ~4 años; con 8–10 los modelos estacionales ganan precisión).
+3. **Modelo global por categoría** (~95 series `ACUERDO_MARCO`): habilita cross-learning y, ahí sí, Deep Learning (TFT/N-BEATS) competitivo.
+4. **Reencuadre de la meta**: para planificación presupuestal, WAPE/MASE (no MAPE) y un horizonte agregado (trimestral) son las métricas correctas; el MAPE mensual con enero es una vara estructuralmente inalcanzable.
+
 - El pipeline es **reproducible** (semillas fijas, rutas relativas) y deja listos los artefactos para los siguientes módulos del sistema.

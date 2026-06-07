@@ -13,8 +13,11 @@ seaborn==0.13.2
 
 # --- Modelado estadístico y de ML ---
 scikit-learn==1.8.0
-statsmodels==0.14.6      # SARIMA y descomposición de series
-xgboost==3.2.0           # modelo de árboles de gradiente
+statsmodels==0.14.6      # SARIMA, ETS/Holt-Winters y descomposición de series
+xgboost==3.2.0           # árboles de gradiente
+lightgbm==4.6.0          # árboles de gradiente (rápido, objetivo Tweedie, cuantiles)
+optuna==4.9.0            # optimización de hiperparámetros sobre el backtest
+holidays==0.98           # feriados de Perú -> días hábiles por mes (features de calendario)
 scipy==1.17.1            # utilidades estadísticas (intervalos)
 
 # --- Red neuronal (LSTM) ---
