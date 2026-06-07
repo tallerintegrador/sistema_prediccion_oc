@@ -29,7 +29,8 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from . import config, features
+from .. import config
+from . import f05_features as features
 
 logger = logging.getLogger(__name__)
 

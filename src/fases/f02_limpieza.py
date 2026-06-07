@@ -22,7 +22,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from . import config
+from .. import config
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,7 @@ def limpiar(df: pd.DataFrame, guardar: bool = True) -> tuple[pd.DataFrame, dict]
 
 
 if __name__ == "__main__":
-    from . import ingesta
+    from . import f01_ingesta as ingesta
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
     _crudo, _ = ingesta.consolidar(guardar=False)
