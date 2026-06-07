@@ -193,7 +193,27 @@ _CONFIG_GRAN = {
 }
 
 
-def _features_desde_historia(serie: pd.Series, fecha, granularidad: str = "mes") -> dict:
+def _features_drivers(fecha, drivers: pd.DataFrame | None) -> dict:
+    """
+    Variables de **drivers internos REZAGADAS** para predecir el valor en `fecha`.
+
+    Se usa el rezago anual (lag-12): el valor de cada driver en el MISMO mes del
+    año anterior. Es la única forma honesta de incorporarlos en un pronóstico
+    multi-paso sin fuga (el lag-12 siempre es conocido dentro de un horizonte ≤ 12
+    meses). Si no hay drivers, devuelve un dict vacío y nada cambia.
+    """
+    if drivers is None or len(drivers) == 0:
+        return {}
+    objetivo = pd.Timestamp(fecha) - pd.DateOffset(years=1)
+    previos = drivers[drivers.index <= objetivo]
+    fila = previos.iloc[-1] if not previos.empty else drivers.iloc[0]
+    return {f"drv_{c}_lag12": float(fila[c]) for c in drivers.columns}
+
+
+def _features_desde_historia(
+    serie: pd.Series, fecha, granularidad: str = "mes",
+    drivers: pd.DataFrame | None = None,
+) -> dict:
     """
     Vector de variables para predecir el valor en `fecha` con la `serie` histórica
     disponible hasta justo antes de esa fecha. Los rezagos y el calendario se
@@ -204,6 +224,8 @@ def _features_desde_historia(serie: pd.Series, fecha, granularidad: str = "mes")
     * Features de **calendario** (`features.py`): días hábiles, indicadores
       enero/diciembre y armónicos de Fourier — clave para aprender el desplome de
       enero en vez de promediarlo.
+    * Si se pasan `drivers`, sus valores REZAGADOS (lag-12) se añaden como señal
+      exógena interna (ver `_features_drivers`).
     """
     cfg = _CONFIG_GRAN[granularidad]
     valores = serie.to_numpy(dtype=float)
@@ -220,17 +242,20 @@ def _features_desde_historia(serie: pd.Series, fecha, granularidad: str = "mes")
         feats.update(features.features_calendario_mes(pd.Timestamp(fecha)))
     elif cfg["calendario"] == "dia":
         feats.update(features.features_calendario_dia(pd.Timestamp(fecha)))
+    feats.update(_features_drivers(fecha, drivers))
     return feats
 
 
-def _tabla_supervisada(serie: pd.Series, granularidad: str = "mes") -> pd.DataFrame:
+def _tabla_supervisada(
+    serie: pd.Series, granularidad: str = "mes", drivers: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Genera la tabla (X, y) de aprendizaje supervisado a partir de la serie."""
     min_historia = _CONFIG_GRAN[granularidad]["min"]
     filas = []
     fechas = serie.index
     for i in range(min_historia, len(serie)):
         hist = serie.iloc[:i]
-        feats = _features_desde_historia(hist, fechas[i], granularidad)
+        feats = _features_desde_historia(hist, fechas[i], granularidad, drivers)
         feats["y"] = float(serie.iloc[i])
         filas.append(feats)
     return pd.DataFrame(filas)
@@ -265,16 +290,16 @@ def _crear_gbm(tipo: str, objetivo: str):
 
 def _gbm_recursivo(serie_g: pd.Series, n: int, tipo: str, objetivo: str = config.OBJETIVO_GBM,
                    log_target: bool = False, params: dict | None = None,
-                   granularidad: str = "mes") -> dict:
+                   granularidad: str = "mes", drivers: pd.DataFrame | None = None) -> dict:
     """
     Motor genérico de pronóstico recursivo con árboles de gradiente. Sirve para
     cualquier serie no-negativa (gasto, nº de órdenes, ticket) y cualquier
     `granularidad` ('mes', 'semana', 'dia'): entrena sobre la tabla supervisada
-    (lags + calendario) y predice paso a paso, reincorporando cada predicción para
-    la siguiente.
+    (lags + calendario [+ drivers rezagados]) y predice paso a paso, reincorporando
+    cada predicción para la siguiente.
     """
     fijar_semillas()
-    tabla = _tabla_supervisada(serie_g, granularidad)
+    tabla = _tabla_supervisada(serie_g, granularidad, drivers)
     columnas_x = [c for c in tabla.columns if c != "y"]
     X = tabla[columnas_x]
     y = tabla["y"]
@@ -290,7 +315,7 @@ def _gbm_recursivo(serie_g: pd.Series, n: int, tipo: str, objetivo: str = config
     fechas_fut = _indice_futuro(serie_g, n)
     preds = []
     for fecha in fechas_fut:
-        feats = _features_desde_historia(hist, fecha, granularidad)
+        feats = _features_desde_historia(hist, fecha, granularidad, drivers)
         x = pd.DataFrame([feats])[columnas_x]
         yhat = float(modelo.predict(x)[0])
         if log_target:
@@ -309,6 +334,16 @@ def pronostico_xgboost(historia, n: int) -> dict:
 def pronostico_lightgbm(historia, n: int) -> dict:
     """LightGBM con calendario y objetivo Tweedie, pronóstico recursivo."""
     return _gbm_recursivo(_serie_gasto(historia), n, tipo="lightgbm")
+
+
+def pronostico_lightgbm_con_params(historia, n: int, params: dict | None = None,
+                                   drivers: pd.DataFrame | None = None) -> dict:
+    """
+    LightGBM con hiperparámetros explícitos (p. ej. los de Optuna) y/o drivers
+    internos rezagados. Pensado para registrarse vía `functools.partial` en la
+    comparación de modelos sin romper la firma `f(historia, n)` del dict `MODELOS`.
+    """
+    return _gbm_recursivo(_serie_gasto(historia), n, tipo="lightgbm", params=params, drivers=drivers)
 
 
 # ---------------------------------------------------------------------------
@@ -393,6 +428,187 @@ def pronostico_ensemble(historia, n: int) -> dict:
         raise RuntimeError("Ensemble sin componentes válidos.")
     pred = np.median(np.vstack(preds), axis=0)
     return {"pred": pred, "lower": None, "upper": None, "detalle": "mediana(ETS, drift, SARIMA)"}
+
+
+# ---------------------------------------------------------------------------
+# 3e) Modelo GLOBAL / JERÁRQUICO por categoría (cross-learning + reconciliación)
+# ---------------------------------------------------------------------------
+def _serie_por_categoria(panel: pd.DataFrame) -> dict:
+    """Dict {categoria -> serie mensual de gasto} a partir del panel largo."""
+    out: dict[str, pd.Series] = {}
+    for cat, g in panel.groupby("categoria"):
+        out[str(cat)] = g.sort_values("fecha").set_index("fecha")["gasto"]
+    return out
+
+
+def _tabla_supervisada_panel(panel: pd.DataFrame, drivers: pd.DataFrame | None = None) -> pd.DataFrame:
+    """
+    Tabla supervisada GLOBAL: apila las filas de todas las categorías del panel.
+
+    Cada fila reusa los features autorregresivos/calendario de
+    `_features_desde_historia` (sobre la historia de ESA categoría) y añade, sin
+    fuga, variables transversales: `categoria` (categórica), `share_categoria`
+    (peso REZAGADO de la categoría en el total) y `antiguedad` (meses desde su
+    primer gasto). Un único modelo entrenado sobre esta tabla aprende de las ~N
+    categorías a la vez (cross-learning).
+    """
+    series = _serie_por_categoria(panel)
+    total_por_fecha = panel.groupby("fecha")["gasto"].sum()
+    min_historia = _CONFIG_GRAN["mes"]["min"]
+    filas = []
+    for cat, serie in series.items():
+        valores = serie.to_numpy(dtype=float)
+        nz = int(np.argmax(valores > 0)) if (valores > 0).any() else 0
+        fechas = serie.index
+        for i in range(min_historia, len(serie)):
+            hist = serie.iloc[:i]
+            feats = _features_desde_historia(hist, fechas[i], "mes", drivers)
+            feats["categoria"] = cat
+            tot_prev = float(total_por_fecha.get(fechas[i - 1], 0.0))
+            feats["share_categoria"] = float(hist.iloc[-1] / tot_prev) if tot_prev > 0 else 0.0
+            feats["antiguedad"] = max(i - nz, 0)
+            feats["y"] = float(serie.iloc[i])
+            filas.append(feats)
+    return pd.DataFrame(filas)
+
+
+def pronostico_global_jerarquico(panel: pd.DataFrame, n: int,
+                                 drivers: pd.DataFrame | None = None,
+                                 params: dict | None = None) -> dict:
+    """
+    Modelo **global** por categoría con reconciliación **bottom-up**.
+
+    Entrena UN solo LightGBM (objetivo Tweedie) sobre el panel apilado de todas las
+    categorías y pronostica cada una de forma recursiva; el gasto total es la SUMA
+    de las categorías pronosticadas. Como el panel se construye con top-N + 'OTRAS'
+    (que absorbe el resto), la suma reconstituye exactamente el agregado.
+
+    El cross-learning da al modelo ~N× más muestras que la serie agregada: es la
+    mayor palanca interna disponible sin datos exógenos. Devuelve `pred` (total) y
+    `componentes` (pronóstico por categoría).
+    """
+    fijar_semillas()
+    tabla = _tabla_supervisada_panel(panel, drivers)
+    if tabla.empty:
+        raise RuntimeError("Panel demasiado corto para el modelo global jerárquico.")
+
+    columnas_x = [c for c in tabla.columns if c != "y"]
+    categorias = sorted(panel["categoria"].astype(str).unique())
+    cat_dtype = pd.CategoricalDtype(categories=categorias)
+
+    X = tabla[columnas_x].copy()
+    X["categoria"] = X["categoria"].astype(cat_dtype)
+    y = tabla["y"]
+
+    modelo = _crear_gbm("lightgbm", config.OBJETIVO_GBM)
+    if params:
+        modelo.set_params(**params)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        modelo.fit(X, y, categorical_feature=["categoria"])
+
+    series = _serie_por_categoria(panel)
+    hist = {cat: serie.copy() for cat, serie in series.items()}
+    running_total = panel.groupby("fecha")["gasto"].sum().copy()
+    nz = {
+        cat: (int(np.argmax(s.to_numpy() > 0)) if (s.to_numpy() > 0).any() else 0)
+        for cat, s in series.items()
+    }
+
+    fechas_fut = _indice_futuro(next(iter(series.values())), n)
+    pred_por_cat: dict[str, list] = {cat: [] for cat in series}
+    for fecha in fechas_fut:
+        preds_mes = {}
+        for cat, h in hist.items():
+            feats = _features_desde_historia(h, fecha, "mes", drivers)
+            feats["categoria"] = cat
+            tot_prev = float(running_total.get(h.index[-1], 0.0))
+            feats["share_categoria"] = float(h.iloc[-1] / tot_prev) if tot_prev > 0 else 0.0
+            feats["antiguedad"] = max(len(h) - nz[cat], 0)
+            x = pd.DataFrame([feats])[columnas_x]
+            x["categoria"] = x["categoria"].astype(cat_dtype)
+            preds_mes[cat] = max(float(modelo.predict(x)[0]), 0.0)
+        for cat in series:
+            hist[cat] = pd.concat([hist[cat], pd.Series([preds_mes[cat]], index=[fecha])])
+            pred_por_cat[cat].append(preds_mes[cat])
+        running_total = pd.concat(
+            [running_total, pd.Series([sum(preds_mes.values())], index=[fecha])]
+        )
+
+    total_pred = np.sum([np.asarray(v, dtype=float) for v in pred_por_cat.values()], axis=0)
+    return {
+        "pred": total_pred, "lower": None, "upper": None,
+        "detalle": f"global LightGBM ({len(series)} categorías, bottom-up)",
+        "componentes": {c: np.asarray(v, dtype=float) for c, v in pred_por_cat.items()},
+        "modelo": modelo,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 3f) Tuning de hiperparámetros del GBM con Optuna (objetivo = WAPE rolling-origin)
+# ---------------------------------------------------------------------------
+def optimizar_gbm(serie_g: pd.Series, granularidad: str = "mes",
+                  n_trials: int | None = None, drivers: pd.DataFrame | None = None) -> dict | None:
+    """
+    Busca hiperparámetros del LightGBM minimizando el **WAPE medio** en validación
+    de origen móvil (los mismos cortes que el backtesting). Devuelve el dict de
+    `best_params` o `None` si Optuna está desactivado/ausente o la serie es corta.
+
+    El informe documenta que el tuning no rompe el techo del 10% (los GBM pierden
+    contra los estadísticos); por eso se acota a `config.N_TRIALS_OPTUNA` trials.
+    """
+    if not config.USAR_OPTUNA:
+        return None
+    try:
+        import optuna
+    except ImportError:
+        logger.warning("Optuna no está instalado; se omite el tuning de hiperparámetros.")
+        return None
+
+    n_trials = n_trials or config.N_TRIALS_OPTUNA
+    h, m, n_total = config.MESES_HOLDOUT, config.PERIODO_ESTACIONAL, len(serie_g)
+    cortes = sorted(
+        c for c in (n_total - h - i for i in range(config.BACKTEST_N_ORIGENES)) if c >= 2 * m
+    )
+    if not cortes:
+        logger.warning("Serie demasiado corta para tuning con Optuna; se omite.")
+        return None
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    def _objetivo(trial) -> float:
+        params = {
+            "num_leaves": trial.suggest_int("num_leaves", 7, 63),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "n_estimators": trial.suggest_int("n_estimators", 100, 600, step=50),
+            "min_child_samples": trial.suggest_int("min_child_samples", 3, 20),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0.0, 5.0),
+        }
+        wapes = []
+        for corte in cortes:
+            train = serie_g.iloc[:corte]
+            test = serie_g.iloc[corte:corte + h].to_numpy(dtype=float)
+            try:
+                pred = _gbm_recursivo(
+                    train, len(test), tipo="lightgbm", params=params,
+                    granularidad=granularidad, drivers=drivers,
+                )["pred"]
+            except Exception:  # noqa: BLE001
+                return float("inf")
+            den = np.abs(test).sum()
+            wapes.append(np.abs(test - pred).sum() / den * 100 if den > 0 else np.nan)
+        valor = float(np.nanmean(wapes))
+        return valor if np.isfinite(valor) else float("inf")
+
+    estudio = optuna.create_study(
+        direction="minimize",
+        sampler=optuna.samplers.TPESampler(seed=config.SEMILLA),
+    )
+    estudio.optimize(_objetivo, n_trials=n_trials, show_progress_bar=False)
+    logger.info("Optuna: mejor WAPE(CV)=%.2f%% con %s", estudio.best_value, estudio.best_params)
+    return estudio.best_params
 
 
 # ---------------------------------------------------------------------------

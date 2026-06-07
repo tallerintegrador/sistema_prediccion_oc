@@ -106,6 +106,32 @@ TWEEDIE_VARIANCE_POWER: float = 1.3
 PAIS_FERIADOS: str = "PE"
 N_ARMONICOS_FOURIER: int = 3      # nº de armónicos para la estacionalidad anual
 
+# ---------------------------------------------------------------------------
+# Cobertura de datos, modelo global/jerárquico, tuning e intervalos
+# ---------------------------------------------------------------------------
+# Año mínimo de cobertura esperado. NO filtra la ingesta (que lee todo data/):
+# solo sirve para VERIFICAR de forma trazable que la serie usa 2022→presente.
+ANIO_INICIO_DATOS: int = 2022
+
+# Nº de categorías (ACUERDO_MARCO) que entran como series propias en el panel
+# del modelo global; el resto se agrupa en el bucket 'OTRAS'. Se eligen las de
+# mayor gasto acumulado (cubren ~95% del gasto) para no meter al modelo global
+# series ultra-ralas que solo añaden ruido. El gasto total se reconcilia como la
+# suma de estas top_n + 'OTRAS' (reconciliación bottom-up).
+TOP_N_CATEGORIAS: int = 15
+
+# Tuning de hiperparámetros de los GBM con Optuna. El informe documenta que el
+# tuning no rompe el techo del 10% (los GBM pierden contra los estadísticos pase
+# lo que pase), por eso se acota a pocos trials para no inflar el runtime.
+USAR_OPTUNA: bool = True
+N_TRIALS_OPTUNA: int = 30
+
+# Intervalos de predicción conformales (cuantiles empíricos del error absoluto
+# por paso de horizonte, medidos en el backtest) en vez del RMSE-normal. Más
+# honestos cuando los residuos no son gaussianos. Fallback al RMSE-normal si se
+# desactiva o no hay suficientes folds.
+USAR_CONFORMAL: bool = True
+
 # Umbral para la detección automática de meses incompletos en la cola:
 # si el conteo de órdenes de un mes de la cola es menor a esta fracción de su
 # valor esperado (mismo mes del año anterior), se considera incompleto.

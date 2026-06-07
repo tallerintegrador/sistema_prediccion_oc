@@ -1,6 +1,6 @@
 # Informe de Resultados — Módulo A: Pronóstico del Gasto en Órdenes de Compra
 
-_Sistema de Predicción de Órdenes de Compra (SistemaPrediccionOC). Generado el 2026-06-07 01:13._
+_Sistema de Predicción de Órdenes de Compra (SistemaPrediccionOC). Generado el 2026-06-07 01:44._
 
 ## 1. Introducción
 
@@ -93,10 +93,14 @@ El SARIMA seleccionado automáticamente por AIC fue **SARIMA(1, 0, 0)x(0, 1, 0, 
 | Modelo | WAPE (%) | MASE | MAPE (%) | sMAPE (%) | MAE (S/) | RMSE (S/) | MPE (%) |
 |---|---|---|---|---|---|---|---|
 | Ensemble ⭐ | 16.5 | 0.75 | 28.0 | 23.6 | 24,319,489 | 28,985,223 | -13.5 |
+| Global jerárquico | 17.2 | 0.79 | 28.1 | 24.9 | 25,554,988 | 32,879,475 | -6.8 |
 | ETS | 17.4 | 0.78 | 24.4 | 21.5 | 25,302,705 | 30,768,096 | -13.8 |
+| Global + drivers | 18.0 | 0.81 | 28.1 | 25.4 | 26,052,005 | 32,998,571 | -5.1 |
 | Estacional drift | 18.0 | 0.84 | 29.4 | 26.2 | 27,030,989 | 33,631,720 | -6.4 |
+| LightGBM+drivers | 18.4 | 0.83 | 40.4 | 26.7 | 26,680,908 | 32,190,454 | -32.3 |
 | Naive estacional | 19.0 | 0.86 | 32.3 | 25.9 | 27,870,309 | 32,462,753 | -18.0 |
 | SARIMA | 19.5 | 0.89 | 33.0 | 26.2 | 28,713,065 | 33,198,770 | -20.3 |
+| LightGBM-Optuna | 19.6 | 0.87 | 73.1 | 32.7 | 27,973,773 | 29,851,251 | -60.4 |
 | LightGBM | 20.9 | 0.93 | 46.7 | 30.5 | 30,125,818 | 33,156,464 | -33.4 |
 | Descompuesto | 21.4 | 0.96 | 53.9 | 33.1 | 31,072,158 | 37,137,781 | -38.8 |
 | XGBoost | 24.4 | 1.09 | 51.0 | 36.8 | 35,201,961 | 39,555,994 | -28.6 |
@@ -133,20 +137,44 @@ Se incluyeron una **LSTM** (WAPE 38.9%) y un **Transformer** (WAPE 47.5%) sobre 
 **Conclusión:** para reducir el error, la palanca son los **datos y las features**, no la capacidad de la red.
 
 ### 3.4 Pronóstico hacia adelante
-Con **Ensemble** reentrenado sobre toda la serie se pronostican los próximos **6 meses** (2026-06 a 2026-11), con intervalo de confianza al 95%.
+Con **Ensemble** reentrenado sobre toda la serie se pronostican los próximos **6 meses** (2026-06 a 2026-11), con intervalo de confianza al 95% por método **conformal (cuantil empírico por paso)**. El intervalo conformal usa los cuantiles empíricos del error absoluto por paso de horizonte medidos en el backtesting: no asume normalidad y refleja que la incertidumbre crece con el horizonte.
 
 | Mes | Pronóstico (S/) | Límite inferior | Límite superior |
 |---|---|---|---|
-| 2026-06 | 131,392,861 | 74,582,867 | 188,202,854 |
-| 2026-07 | 161,601,228 | 104,791,234 | 218,411,222 |
-| 2026-08 | 129,890,892 | 73,080,899 | 186,700,886 |
-| 2026-09 | 184,289,292 | 127,479,299 | 241,099,286 |
-| 2026-10 | 200,796,257 | 143,986,264 | 257,606,251 |
-| 2026-11 | 229,712,994 | 172,903,001 | 286,522,988 |
+| 2026-06 | 131,392,861 | 64,840,514 | 197,945,207 |
+| 2026-07 | 161,601,228 | 113,713,848 | 209,488,608 |
+| 2026-08 | 129,890,892 | 72,895,423 | 186,886,361 |
+| 2026-09 | 184,289,292 | 142,826,646 | 225,751,939 |
+| 2026-10 | 200,796,257 | 157,645,482 | 243,947,032 |
+| 2026-11 | 229,712,994 | 211,590,099 | 247,835,890 |
 
 ![Pronóstico final](../figuras/10_pronostico_final.png)
 
 _Se proyecta un gasto acumulado de **S/ 1,038 millones** en los próximos 6 meses. El pronóstico reproduce el patrón estacional histórico (meses altos y bajos) y el intervalo de confianza refleja la incertidumbre: cuanto más ancho, mayor variabilidad esperada. Conviene recalibrar el modelo a medida que ingresen nuevos meses de datos._
+
+### 3.5 Modelo jerárquico global por categoría
+
+Se entrenó **un solo LightGBM global** sobre el panel de las top-15 categorías (`ACUERDO_MARCO`) + 'OTRAS', y se **reconcilió bottom-up** (suma de categorías) al total. El panel multiplica el tamaño muestral (de ~50 puntos mensuales agregados a 16×~50 filas categoría×mes), habilitando *cross-learning* entre categorías — la mayor palanca interna sin datos exógenos.
+
+| Enfoque | WAPE (%) | MASE | MAPE (%) | MPE (%) |
+|---|---|---|---|---|
+| Global jerárquico | 17.2 | 0.79 | 28.1 | -6.8 |
+| Global + drivers | 18.0 | 0.81 | 28.1 | -5.1 |
+
+_Veredicto honesto: el modelo global jerárquico alcanza **WAPE 17.2%**, frente al **16.5%** del mejor modelo agregado (**Ensemble**). El cross-learning **no supera** al mejor modelo agregado en esta serie: las categorías individuales son aún más ralas/ruidosas y al reconciliar se reacumula su incertidumbre. Confirma que el límite es la información disponible, no la arquitectura.
+
+### 3.6 Drivers internos (aporte marginal)
+
+Se midió el aporte de los **drivers internos rezagados** (nº de entidades y proveedores activos, nº de categorías activas, composición por tipo de procedimiento; todos en lag-12 para no inducir fuga) comparando el modelo global **con** y **sin** ellos:
+
+- Sin drivers: WAPE **17.2%**
+- Con drivers: WAPE **18.0%**
+
+_Los drivers internos **no mueven la aguja** (-0.7 pts): son señales coincidentes y, rezagadas, su información ya está contenida en los propios rezagos del gasto. Coherente con el diagnóstico: la palanca está en datos **exógenos** (presupuesto PIA/PIM), no en re-derivar señal interna._
+
+### 3.7 Tuning de hiperparámetros (Optuna)
+
+Se optimizó el LightGBM con **Optuna** (30 trials, objetivo = WAPE en origen móvil). Mejores hiperparámetros: `{'num_leaves': 21, 'learning_rate': 0.01350389031561265, 'n_estimators': 450, 'min_child_samples': 5, 'subsample': 0.9496606563368475, 'colsample_bytree': 0.6923337217338134, 'reg_lambda': 3.941870149075374}`. WAPE LightGBM base: **20.9%** → tuneado: **19.6%**. Como anticipaba el informe, el tuning ajusta al margen pero **no rompe el techo**: los GBM siguen por detrás de los modelos estadísticos en esta serie corta.
 
 ## 4. Conclusiones del Módulo A
 - El gasto en órdenes de compra de los Acuerdos Marco muestra una **estacionalidad anual fuerte** (mínimos en enero–febrero) y una tendencia de fondo a la baja.

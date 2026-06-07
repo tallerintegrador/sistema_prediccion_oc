@@ -185,6 +185,21 @@ def consolidar(guardar: bool = True) -> tuple[pd.DataFrame, dict]:
 
     meses = sorted({m for m in df_consolidado["__mes_archivo"].dropna().unique()})
 
+    # Verificación (no filtrado) de la cobertura 2022→presente. Confirma de forma
+    # trazable que la serie arranca en (o antes de) ANIO_INICIO_DATOS y que la cola
+    # llega hasta hace pocos meses. La ingesta sigue leyendo TODO data/.
+    cobertura = _verificar_cobertura(meses)
+    if not cobertura["inicio_ok"]:
+        logger.warning(
+            "Cobertura: el primer mes (%s) es posterior a %s01; falta historia de %d.",
+            cobertura["primer_mes"], config.ANIO_INICIO_DATOS, config.ANIO_INICIO_DATOS,
+        )
+    if not cobertura["fin_reciente"]:
+        logger.warning(
+            "Cobertura: el último mes (%s) está a %d meses de hoy; ¿faltan archivos recientes?",
+            cobertura["ultimo_mes"], cobertura["meses_desde_ultimo"],
+        )
+
     reporte = {
         "archivos_encontrados": len(archivos),
         "archivos_leidos": len(leidos),
@@ -198,6 +213,7 @@ def consolidar(guardar: bool = True) -> tuple[pd.DataFrame, dict]:
         "archivos_columnas_distintas": {
             n: list(c) for n, c in archivos_distintos.items()
         },
+        "cobertura": cobertura,
     }
 
     if guardar:
@@ -208,8 +224,42 @@ def consolidar(guardar: bool = True) -> tuple[pd.DataFrame, dict]:
     return df_consolidado, reporte
 
 
+def _verificar_cobertura(meses: list[str]) -> dict:
+    """
+    Verifica (sin filtrar) que la serie cubra desde `config.ANIO_INICIO_DATOS`
+    hasta un mes reciente. `meses` es la lista ordenada de 'AAAAMM' presentes.
+
+    Devuelve un dict con el primer/último mes, banderas de cobertura y los meses
+    transcurridos desde el último archivo. `cobertura_ok` resume ambas banderas.
+    """
+    from datetime import date
+
+    if not meses:
+        return {"cobertura_ok": False, "primer_mes": None, "ultimo_mes": None}
+
+    primer, ultimo = meses[0], meses[-1]
+    inicio_ok = primer <= f"{config.ANIO_INICIO_DATOS}01"
+
+    hoy = date.today()
+    anio_u, mes_u = int(ultimo[:4]), int(ultimo[4:6])
+    meses_desde_ultimo = (hoy.year - anio_u) * 12 + (hoy.month - mes_u)
+    # Tolerancia de 2 meses: el mes en curso y el previo pueden no estar cargados.
+    fin_reciente = meses_desde_ultimo <= 2
+
+    return {
+        "primer_mes": primer,
+        "ultimo_mes": ultimo,
+        "anio_inicio_esperado": config.ANIO_INICIO_DATOS,
+        "inicio_ok": inicio_ok,
+        "fin_reciente": fin_reciente,
+        "meses_desde_ultimo": meses_desde_ultimo,
+        "cobertura_ok": inicio_ok and fin_reciente,
+    }
+
+
 def _escribir_log_ingesta(reporte: dict) -> None:
     """Vuelca el resumen de la ingesta a un archivo de texto legible."""
+    cob = reporte.get("cobertura", {})
     lineas = [
         "==== LOG DE INGESTA (ETL) ====",
         f"Archivos encontrados : {reporte['archivos_encontrados']}",
@@ -217,6 +267,10 @@ def _escribir_log_ingesta(reporte: dict) -> None:
         f"Archivos omitidos    : {reporte['archivos_omitidos'] or 'ninguno'}",
         f"Meses cubiertos      : {reporte['n_meses']} "
         f"({reporte['meses_cubiertos'][0]} a {reporte['meses_cubiertos'][-1]})",
+        f"Cobertura 2022→hoy   : {'OK' if cob.get('cobertura_ok') else 'REVISAR'} "
+        f"(inicio<= {cob.get('anio_inicio_esperado')}01: {cob.get('inicio_ok')}, "
+        f"fin reciente: {cob.get('fin_reciente')}, "
+        f"meses desde último: {cob.get('meses_desde_ultimo')})",
         f"Filas totales        : {reporte['filas_totales']:,}",
         f"Codificaciones       : {reporte['codificaciones']}",
         f"Conjuntos de columnas: {reporte['n_conjuntos_columnas']}",

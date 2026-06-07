@@ -77,10 +77,19 @@ def main() -> None:
     serie_completa = serie_temporal.construir_serie_total(df_limpio)
     deteccion = serie_temporal.detectar_meses_incompletos(serie_completa)
     serie_total, serie_categoria, _ = serie_temporal.construir_series(df_limpio, guardar=True)
+    # Panel por categoría y drivers internos: insumos del modelo global/jerárquico.
+    # Se recortan a la MISMA cola que la serie total (meses incompletos fuera) para
+    # que el pronóstico global arranque en el mismo mes que la serie agregada.
+    ultimo_mes = serie_total.index[-1]
+    panel = serie_temporal.construir_panel_categorias(df_limpio)
+    panel = panel[panel["fecha"] <= ultimo_mes].copy()
+    drivers = serie_temporal.construir_drivers_mensuales(df_limpio)
+    drivers = drivers[drivers.index <= ultimo_mes].copy()
     log.info(
-        "Serie mensual: %d meses (tras recorte de incompletos: %s).",
+        "Serie mensual: %d meses (tras recorte de incompletos: %s). Panel: %d categorías.",
         len(serie_total),
         deteccion["meses_incompletos"] or "ninguno",
+        panel["categoria"].nunique(),
     )
 
     # 4) EDA ----------------------------------------------------------------
@@ -89,7 +98,9 @@ def main() -> None:
 
     # 5-6) MODELADO Y EVALUACIÓN -------------------------------------------
     log.info("== 5/6 Modelado y 6/6 Evaluación ==")
-    md_modelos, resultados = evaluacion.ejecutar_evaluacion(serie_total, df_limpio)
+    md_modelos, resultados = evaluacion.ejecutar_evaluacion(
+        serie_total, df_limpio, panel=panel, drivers=drivers
+    )
 
     # INFORME FINAL ---------------------------------------------------------
     informe = (
@@ -99,11 +110,17 @@ def main() -> None:
     log.info("Informe escrito en %s", config.RUTA_INFORME_EDA)
 
     # RESUMEN EN CONSOLA ----------------------------------------------------
+    cob = rep_ingesta.get("cobertura", {})
     print("\n" + "=" * 70)
     print("MÓDULO A COMPLETADO".center(70))
     print("=" * 70)
+    print(
+        f"Cobertura de datos: {cob.get('primer_mes')} -> {cob.get('ultimo_mes')} "
+        f"(2022 a presente: {'OK' if cob.get('cobertura_ok') else 'REVISAR'})"
+    )
     print(f"Mejor modelo: {resultados['mejor_modelo']}")
-    print("\nMétricas en el holdout:")
+    print(f"Intervalos: {resultados.get('metodo_intervalo')}")
+    print("\nMétricas (backtesting de origen móvil):")
     print(resultados["tabla_metricas"].round(2).to_string())
     print(f"\nArtefactos en: {config.DIR_OUTPUTS}")
     print(f"Informe: {config.RUTA_INFORME_EDA}")

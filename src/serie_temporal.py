@@ -14,6 +14,7 @@ Construcción de la serie temporal mensual del gasto a partir del dataset limpio
 from __future__ import annotations
 
 import logging
+import re
 
 import pandas as pd
 
@@ -174,6 +175,96 @@ def construir_serie_por_categoria(df: pd.DataFrame, top_n: int = 8) -> pd.DataFr
     tabla.index = tabla.index.to_timestamp(how="end").normalize()
     tabla.index.name = "fecha"
     return tabla
+
+
+def _top_categorias(df: pd.DataFrame, top_n: int) -> pd.Index:
+    """Índice de las `top_n` categorías (ACUERDO_MARCO) de mayor gasto acumulado."""
+    gasto_cat = df.groupby(config.COL_ACUERDO_MARCO)[config.COL_TOTAL].sum()
+    return gasto_cat.sort_values(ascending=False).head(top_n).index
+
+
+def construir_panel_categorias(
+    df: pd.DataFrame, top_n: int = config.TOP_N_CATEGORIAS
+) -> pd.DataFrame:
+    """
+    Panel **largo** del gasto mensual por categoría, base del modelo global.
+
+    Para cada `(categoria, mes)` devuelve `gasto`, `ordenes` y `ticket_promedio`,
+    con un índice mensual continuo POR categoría (meses sin gasto = 0), de modo que
+    todas las categorías comparten el mismo rango temporal. Se conservan las `top_n`
+    categorías de mayor gasto (cubren ~95% del total) y el resto se agrupa en
+    'OTRAS'; así la **suma de las series del panel reconstituye el gasto total**
+    (reconciliación bottom-up exacta).
+
+    Columnas: ['categoria', 'fecha', 'gasto', 'ordenes', 'ticket_promedio'].
+    """
+    s = df.dropna(subset=[config.COL_FECHA_FORMALIZACION]).copy()
+    s["mes"] = s[config.COL_FECHA_FORMALIZACION].dt.to_period("M")
+    top = _top_categorias(s, top_n)
+    s["categoria"] = s[config.COL_ACUERDO_MARCO].where(
+        s[config.COL_ACUERDO_MARCO].isin(top), other="OTRAS"
+    )
+
+    agg = (
+        s.groupby(["categoria", "mes"])
+        .agg(gasto=(config.COL_TOTAL, "sum"), ordenes=(config.COL_TOTAL, "size"))
+    )
+
+    # Rango mensual común y reindex por categoría (meses ausentes -> 0).
+    rango = pd.period_range(s["mes"].min(), s["mes"].max(), freq="M")
+    categorias = agg.index.get_level_values("categoria").unique()
+    idx_completo = pd.MultiIndex.from_product([categorias, rango], names=["categoria", "mes"])
+    agg = agg.reindex(idx_completo, fill_value=0).reset_index()
+
+    agg["fecha"] = agg["mes"].dt.to_timestamp(how="end").dt.normalize()
+    agg["ticket_promedio"] = (agg["gasto"] / agg["ordenes"]).where(agg["ordenes"] > 0, 0)
+    return agg[["categoria", "fecha", "gasto", "ordenes", "ticket_promedio"]].sort_values(
+        ["categoria", "fecha"]
+    ).reset_index(drop=True)
+
+
+def construir_drivers_mensuales(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Drivers internos mensuales (señales coincidentes derivadas del propio dataset).
+
+    Indexado por mes (fin de mes, igual que `construir_serie_total`) con:
+      - `n_entidades_activas`  : nº de ENTIDAD distintas que compraron en el mes.
+      - `n_proveedores`        : nº de RUC_PROVEEDOR distintos.
+      - `n_categorias_activas` : nº de ACUERDO_MARCO distintos.
+      - `share_<TIPO>`         : proporción de órdenes por TIPO_PROCEDIMIENTO.
+
+    Son señales **coincidentes**: para pronosticar deben usarse REZAGADAS (lo hace
+    `modelos.py`), nunca contemporáneas, para no inducir fuga de información.
+    """
+    s = df.dropna(subset=[config.COL_FECHA_FORMALIZACION]).copy()
+    s["mes"] = s[config.COL_FECHA_FORMALIZACION].dt.to_period("M")
+
+    aggs = {"n_categorias_activas": (config.COL_ACUERDO_MARCO, "nunique")}
+    if config.COL_ENTIDAD in s.columns:
+        aggs["n_entidades_activas"] = (config.COL_ENTIDAD, "nunique")
+    if "RUC_PROVEEDOR" in s.columns:
+        aggs["n_proveedores"] = ("RUC_PROVEEDOR", "nunique")
+    elif config.COL_PROVEEDOR in s.columns:
+        aggs["n_proveedores"] = (config.COL_PROVEEDOR, "nunique")
+
+    drivers = s.groupby("mes").agg(**aggs)
+
+    # Composición por tipo de procedimiento (proporción de órdenes del mes).
+    if config.COL_TIPO_PROC in s.columns:
+        comp = (
+            s.groupby(["mes", config.COL_TIPO_PROC]).size().unstack(fill_value=0)
+        )
+        comp = comp.div(comp.sum(axis=1).where(comp.sum(axis=1) > 0, 1), axis=0)
+        comp.columns = [
+            "share_" + re.sub(r"\W+", "_", str(c)).strip("_").lower() for c in comp.columns
+        ]
+        drivers = drivers.join(comp)
+
+    rango = pd.period_range(drivers.index.min(), drivers.index.max(), freq="M")
+    drivers = drivers.reindex(rango, fill_value=0)
+    drivers.index = drivers.index.to_timestamp(how="end").normalize()
+    drivers.index.name = "fecha"
+    return drivers
 
 
 def construir_series(
