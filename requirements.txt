@@ -25,3 +25,8 @@ networkx==3.6.1          # grafo bipartito, grados, comunidades (Louvain), lock-
 
 # --- Red neuronal (LSTM) ---
 torch==2.12.0            # PyTorch (CPU); el instalador resuelve la build adecuada
+
+# --- Backend / API REST (expone los resultados de los Módulos A y B) ---
+fastapi==0.136.1         # framework del API
+uvicorn==0.47.0          # servidor ASGI para levantar el API
+# nota: pydantic ya viene como dependencia de fastapi (validación de respuestas)
