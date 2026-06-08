@@ -2,7 +2,7 @@
 Paquete `src` del SistemaPrediccionOC — Módulo A (pronóstico del gasto público
 en órdenes de compra de los Acuerdos Marco de PERÚ COMPRAS).
 
-Arquitectura por fases:
+Arquitectura por fases (Módulo A — pronóstico):
 
     config          -> rutas y parámetros centrales (lo usa todo el proyecto)
     figuras         -> registro central de figuras (estilo + numeración ordenada)
@@ -16,5 +16,13 @@ Arquitectura por fases:
         f06_modelado        -> catálogo de modelos de pronóstico
         f07_evaluacion      -> backtest, selección y pronóstico final
 
-Punto de entrada: `from src.pipeline import ejecutar_pipeline`.
+Submódulos del Módulo B (detección de anomalías; reutilizan la capa de datos):
+    config_b             -> rutas y parámetros del Módulo B
+    features_anomalias   -> ingeniería de variables de anomalía
+    eda_anomalias        -> EDA orientado a anomalías y figuras
+    modelos_anomalias    -> Isolation Forest, autoencoder y análisis de grafo
+    riesgo               -> puntaje, niveles, tipo y ranking de alertas
+    evaluacion_anomalias -> precision@k, inyección sintética y concordancia
+
+Punto de entrada Módulo A: `from src.pipeline import ejecutar_pipeline`.
 """

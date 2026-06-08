@@ -12,13 +12,16 @@ matplotlib==3.10.9
 seaborn==0.13.2
 
 # --- Modelado estadístico y de ML ---
-scikit-learn==1.8.0
+scikit-learn==1.8.0      # IsolationForest y MLP (autoencoder) del Módulo B; modelos del A
 statsmodels==0.14.6      # SARIMA, ETS/Holt-Winters y descomposición de series
 xgboost==3.2.0           # árboles de gradiente
 lightgbm==4.6.0          # árboles de gradiente (rápido, objetivo Tweedie, cuantiles)
 optuna==4.9.0            # optimización de hiperparámetros sobre el backtest
 holidays==0.98           # feriados de Perú -> días hábiles por mes (features de calendario)
 scipy==1.17.1            # utilidades estadísticas (intervalos)
+
+# --- Análisis de grafos (Módulo B: red entidad–proveedor) ---
+networkx==3.6.1          # grafo bipartito, grados, comunidades (Louvain), lock-in
 
 # --- Red neuronal (LSTM) ---
 torch==2.12.0            # PyTorch (CPU); el instalador resuelve la build adecuada
