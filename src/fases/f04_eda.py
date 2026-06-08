@@ -15,44 +15,25 @@ from __future__ import annotations
 
 import logging
 
-import matplotlib
-
-matplotlib.use("Agg")  # backend sin ventana: imprescindible para guardar figuras en lote
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from statsmodels.tsa.seasonal import seasonal_decompose
 
-from . import config
+from .. import config, figuras
 
 logger = logging.getLogger(__name__)
 
-sns.set_theme(style="whitegrid", palette="deep")
-plt.rcParams["figure.dpi"] = 110
-plt.rcParams["savefig.bbox"] = "tight"
-plt.rcParams["axes.titlesize"] = 12
+# El estilo (tema seaborn, DPI, backend "Agg") y el guardado/numeración de
+# figuras viven en el registro central `figuras.py`, para que TODAS las gráficas
+# del flujo compartan estilo y un orden consistente. Aquí solo se construyen.
+figuras.aplicar_estilo()
 
 MESES_ES = {
     1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr", 5: "May", 6: "Jun",
     7: "Jul", 8: "Ago", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic",
 }
-
-
-def _guardar(fig: plt.Figure, nombre: str) -> str:
-    """Guarda la figura en outputs/figuras y devuelve su ruta relativa."""
-    ruta = config.DIR_FIGURAS / nombre
-    fig.savefig(ruta)
-    plt.close(fig)
-    logger.info("Figura guardada: %s", ruta.name)
-    # Ruta relativa DESDE el informe (outputs/resultados/) hacia outputs/figuras/.
-    return f"../figuras/{nombre}"
-
-
-def _millones(x, _pos=None) -> str:
-    """Formatea un monto en soles como 'X.X M' (millones)."""
-    return f"{x / 1e6:,.1f}M"
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +44,7 @@ def fig_evolucion_temporal(serie: pd.DataFrame) -> tuple[str, str]:
     fig, ax1 = plt.subplots(figsize=(11, 4.5))
     ax1.plot(serie.index, serie["gasto"], color="#1f4e79", marker="o", ms=3, label="Gasto (S/)")
     ax1.set_ylabel("Gasto mensual (S/)", color="#1f4e79")
-    ax1.yaxis.set_major_formatter(mticker.FuncFormatter(_millones))
+    ax1.yaxis.set_major_formatter(figuras.formato_millones())
     ax1.tick_params(axis="y", labelcolor="#1f4e79")
 
     ax2 = ax1.twinx()
@@ -74,7 +55,7 @@ def fig_evolucion_temporal(serie: pd.DataFrame) -> tuple[str, str]:
 
     ax1.set_title("Evolución mensual del gasto y del número de órdenes (FECHA_FORMALIZACIÓN)")
     ax1.set_xlabel("Mes")
-    ruta = _guardar(fig, "01_evolucion_gasto_ordenes.png")
+    ruta = figuras.guardar(fig, "evolucion_gasto_ordenes")
 
     gasto_total = serie["gasto"].sum()
     prom_mensual = serie["gasto"].mean()
@@ -103,7 +84,7 @@ def fig_distribucion_total(df: pd.DataFrame) -> tuple[str, str]:
     ax.set_title("Distribución del monto TOTAL por orden (escala log10)")
     ax.set_xlabel("log10(TOTAL en S/)")
     ax.set_ylabel("N.º de órdenes")
-    ruta = _guardar(fig, "02_distribucion_total.png")
+    ruta = figuras.guardar(fig, "distribucion_total")
 
     interp = (
         f"El monto por orden está **fuertemente sesgado a la derecha**: la mediana es "
@@ -125,8 +106,8 @@ def fig_gasto_por_categoria(df: pd.DataFrame, top_n: int = 12) -> tuple[str, str
     ax.barh(etiquetas[::-1], top.values[::-1], color="#548235")
     ax.set_title(f"Gasto acumulado por ACUERDO_MARCO (top {top_n})")
     ax.set_xlabel("Gasto (S/)")
-    ax.xaxis.set_major_formatter(mticker.FuncFormatter(_millones))
-    ruta = _guardar(fig, "03_gasto_por_categoria.png")
+    ax.xaxis.set_major_formatter(figuras.formato_millones())
+    ruta = figuras.guardar(fig, "gasto_por_categoria")
 
     pct_top = top.sum() / gasto.sum() * 100
     interp = (
@@ -149,12 +130,12 @@ def fig_gasto_por_tipo(df: pd.DataFrame) -> tuple[str, str]:
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
     axes[0].bar(g.index, g["gasto"], color="#c55a11")
     axes[0].set_title("Gasto por tipo de procedimiento")
-    axes[0].yaxis.set_major_formatter(mticker.FuncFormatter(_millones))
+    axes[0].yaxis.set_major_formatter(figuras.formato_millones())
     axes[0].tick_params(axis="x", rotation=15)
     axes[1].bar(g.index, g["ordenes"], color="#7f7f7f")
     axes[1].set_title("N.º de órdenes por tipo de procedimiento")
     axes[1].tick_params(axis="x", rotation=15)
-    ruta = _guardar(fig, "04_gasto_por_tipo_procedimiento.png")
+    ruta = figuras.guardar(fig, "gasto_por_tipo_procedimiento")
 
     top_gasto = g["gasto"].idxmax()
     top_ordenes = g["ordenes"].idxmax()
@@ -178,11 +159,11 @@ def fig_top_entidades_proveedores(df: pd.DataFrame, top_n: int = 12) -> tuple[st
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
     axes[0].barh([e[:38] for e in ent.index][::-1], ent.values[::-1], color="#1f4e79")
     axes[0].set_title(f"Top {top_n} entidades por gasto")
-    axes[0].xaxis.set_major_formatter(mticker.FuncFormatter(_millones))
+    axes[0].xaxis.set_major_formatter(figuras.formato_millones())
     axes[1].barh([p[:38] for p in prov.index][::-1], prov.values[::-1], color="#843c0c")
     axes[1].set_title(f"Top {top_n} proveedores por gasto")
-    axes[1].xaxis.set_major_formatter(mticker.FuncFormatter(_millones))
-    ruta = _guardar(fig, "05_top_entidades_proveedores.png")
+    axes[1].xaxis.set_major_formatter(figuras.formato_millones())
+    ruta = figuras.guardar(fig, "top_entidades_proveedores")
 
     interp = (
         f"Hay **{df[config.COL_ENTIDAD].nunique():,} entidades** compradoras y "
@@ -205,8 +186,8 @@ def fig_estacionalidad_mes(serie: pd.DataFrame) -> tuple[str, str]:
     ax.set_title("Estacionalidad: distribución del gasto mensual por mes calendario")
     ax.set_xlabel("Mes")
     ax.set_ylabel("Gasto (S/)")
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_millones))
-    ruta = _guardar(fig, "06_estacionalidad_por_mes.png")
+    ax.yaxis.set_major_formatter(figuras.formato_millones())
+    ruta = figuras.guardar(fig, "estacionalidad_por_mes")
 
     medias = aux.groupby("mes_num")["gasto"].mean()
     mes_bajo = MESES_ES[int(medias.idxmin())]
@@ -238,9 +219,9 @@ def fig_descomposicion(serie: pd.DataFrame) -> tuple[str, str]:
     desc.seasonal.plot(ax=axes[2], color="#548235"); axes[2].set_ylabel("Estacional")
     desc.resid.plot(ax=axes[3], color="#7f7f7f", marker="."); axes[3].set_ylabel("Residuo")
     for a in axes:
-        a.yaxis.set_major_formatter(mticker.FuncFormatter(_millones))
+        a.yaxis.set_major_formatter(figuras.formato_millones())
     axes[0].set_title("Descomposición aditiva de la serie de gasto mensual (periodo=12)")
-    ruta = _guardar(fig, "07_descomposicion_serie.png")
+    ruta = figuras.guardar(fig, "descomposicion_serie")
 
     amplitud = desc.seasonal.max() - desc.seasonal.min()
     tendencia = desc.trend.dropna()
@@ -271,7 +252,7 @@ def fig_deteccion_incompletos(serie_completa: pd.DataFrame, deteccion: dict) -> 
     ax.set_title("Detección de meses incompletos: n.º de órdenes por mes")
     ax.set_xlabel("Mes")
     ax.set_ylabel("N.º de órdenes")
-    ruta = _guardar(fig, "08_deteccion_meses_incompletos.png")
+    ruta = figuras.guardar(fig, "deteccion_meses_incompletos")
 
     if incompletos:
         lista = ", ".join(d.strftime("%Y-%m") for d in incompletos)

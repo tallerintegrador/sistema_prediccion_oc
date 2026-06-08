@@ -89,33 +89,41 @@ pronóstico.
 
 ## 3. Estructura del repositorio
 
+La arquitectura está organizada **por fases**: una fase por archivo, numeradas en
+orden de flujo dentro de `src/fases/`. Un orquestador (`src/pipeline.py`) las
+ejecuta en orden, y un registro central (`src/figuras.py`) numera y ordena todas
+las figuras.
+
 ```
 SistemaPrediccionOC/
-├── data/                      # CSVs originales por año (no se modifican)
+├── data/                       # CSVs originales por año (no se modifican)
 ├── src/
-│   ├── config.py              # rutas y parámetros centrales
-│   ├── ingesta.py             # lectura y consolidación de los CSV (ETL)
-│   ├── limpieza.py            # limpieza y validación
-│   ├── serie_temporal.py      # series mensual / semanal / diaria
-│   ├── features.py            # features de calendario (días hábiles, feriados, Fourier)
-│   ├── eda.py                 # análisis exploratorio y figuras (Módulo A)
-│   ├── modelos.py             # naive(+drift), SARIMA, ETS, Ensemble, XGBoost/LightGBM, descompuesto, LSTM, Transformer
-│   ├── evaluacion.py          # métricas (WAPE/MASE/…), backtest de origen móvil y pronóstico
+│   ├── config.py               # rutas y parámetros centrales (lo usa todo)
+│   ├── figuras.py              # registro central de figuras (estilo + numeración 01..11)
+│   ├── pipeline.py             # ORQUESTADOR: define y ejecuta las 7 fases en orden
+│   ├── fases/                  # una fase por archivo, en orden de flujo (Módulo A):
+│   │   ├── f01_ingesta.py          # 1. extracción/ETL: lectura y consolidación de los CSV
+│   │   ├── f02_limpieza.py         # 2. limpieza y validación
+│   │   ├── f03_serie_temporal.py   # 3. serie mensual + panel por categoría + drivers
+│   │   ├── f04_eda.py              # 4. análisis exploratorio y figuras 01–08
+│   │   ├── f05_features.py         # 5. features de calendario (días hábiles, feriados, Fourier)
+│   │   ├── f06_modelado.py         # 6. naive(+drift), SARIMA, ETS, Ensemble, XGBoost/LightGBM, descompuesto, LSTM, Transformer
+│   │   └── f07_evaluacion.py       # 7. métricas (WAPE/MASE/…), backtest de origen móvil y pronóstico
 │   │   # ----- Módulo B (detección de anomalías) -----
-│   ├── config_b.py            # parámetros y rutas del Módulo B
-│   ├── features_anomalias.py  # ingeniería de variables de anomalía (corazón del B)
-│   ├── eda_anomalias.py       # EDA orientado a anomalías (figuras b*.png)
-│   ├── modelos_anomalias.py   # Isolation Forest + autoencoder + grafo (networkx)
-│   ├── riesgo.py              # puntaje de riesgo, niveles, tipo y ranking de alertas
-│   └── evaluacion_anomalias.py# precision@k, inyección sintética, concordancia
+│   ├── config_b.py             # parámetros y rutas del Módulo B
+│   ├── features_anomalias.py   # ingeniería de variables de anomalía (corazón del B)
+│   ├── eda_anomalias.py        # EDA orientado a anomalías (figuras b*.png)
+│   ├── modelos_anomalias.py    # Isolation Forest + autoencoder + grafo (networkx)
+│   ├── riesgo.py               # puntaje de riesgo, niveles, tipo y ranking de alertas
+│   └── evaluacion_anomalias.py # precision@k, inyección sintética, concordancia
 ├── notebooks/
-│   └── flujo_completo.ipynb   # (opcional) recorrido guiado del flujo
+│   └── flujo_completo.ipynb    # recorrido guiado de las 7 fases (figuras inline)
 ├── outputs/
-│   ├── figuras/               # gráficas (.png): 01..11 del A, b01..b08 del B
-│   ├── modelos/               # modelo entrenado serializado (A)
-│   └── resultados/            # datasets, métricas, pronóstico, alertas e informes
-├── main.py                    # Módulo A: flujo de pronóstico de punta a punta
-├── main_modulo_b.py           # Módulo B: flujo de detección de anomalías
+│   ├── figuras/                # gráficas (.png): 01..11 del A, b01..b08 del B
+│   ├── modelos/                # modelo entrenado serializado (A)
+│   └── resultados/             # datasets, métricas, pronóstico, alertas e informes
+├── main.py                     # Módulo A: flujo de pronóstico de punta a punta
+├── main_modulo_b.py            # Módulo B: flujo de detección de anomalías
 ├── requirements.txt
 └── README.md
 ```
@@ -154,16 +162,28 @@ pip install -r requirements.txt
 python main.py
 ```
 
-`main.py` ejecuta en orden: **ingesta → limpieza → serie temporal → EDA →
-modelos → evaluación**, e imprime un resumen final. Al terminar, todos los
-artefactos quedan en `outputs/`.
+`main.py` ejecuta el pipeline en **7 fases ordenadas**: **ingesta → limpieza →
+serie temporal → EDA → features → modelado → evaluación**, imprime un **resumen
+por fase** en consola y un resumen final. Al terminar, todos los artefactos quedan
+en `outputs/`.
 
-> También puede ejecutarse cada etapa por separado, p. ej.
-> `python -m src.ingesta` o `python -m src.limpieza`.
+```
+[FASE 1/7] Ingesta / ETL  (2.1 s)
+   Extracción: lectura y consolidación de los CSV mensuales.
+     - Archivos leídos     : 53/53 (omitidos: 0)
+     - Filas consolidadas  : 483,889
+     ...
+[FASE 7/7] Evaluación y pronóstico  (...)
+     - Mejor modelo        : Ensemble  (WAPE 16.5% · MASE 0.75)
+```
+
+> Cada fase también puede ejecutarse de forma aislada, p. ej.
+> `python -m src.fases.f01_ingesta` o `python -m src.fases.f02_limpieza`.
 
 ### Salidas generadas
 
-- `outputs/figuras/` — 10 gráficas del EDA y del pronóstico.
+- `outputs/figuras/` — 11 gráficas numeradas (01–08 EDA; 09–11 evaluación y
+  pronóstico), ordenadas por el registro central `src/figuras.py`.
 - `outputs/resultados/informe_resultados.md` — **informe completo** (EDA +
   comparación de modelos + conclusiones).
 - `outputs/resultados/comparacion_modelos.csv` — tabla de métricas.

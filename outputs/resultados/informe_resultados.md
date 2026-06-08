@@ -1,12 +1,12 @@
 # Informe de Resultados — Módulo A: Pronóstico del Gasto en Órdenes de Compra
 
-_Sistema de Predicción de Órdenes de Compra (SistemaPrediccionOC). Generado el 2026-06-07 01:44._
+_Sistema de Predicción de Órdenes de Compra (SistemaPrediccionOC). Generado el 2026-06-07 13:13._
 
 ## 1. Introducción
 
 Este informe documenta el **Módulo A** del sistema: el pronóstico del gasto público mensual en las **Órdenes de Compra de los Catálogos Electrónicos de Acuerdos Marco** de la Central de Compras Públicas del Perú (PERÚ COMPRAS). Cada registro es una orden de compra de bienes emitida por una entidad pública a un proveedor, con su monto y convenio.
 
-La variable a pronosticar es el **gasto total mensual** (suma de `TOTAL`), agregado por **`FECHA_FORMALIZACION`**. El informe reúne el análisis exploratorio con sus interpretaciones y la comparación de modelos con su conclusión.
+El flujo está organizado en **7 fases ordenadas** (ingesta → limpieza → serie temporal → EDA → features → modelado → evaluación). La variable a pronosticar es el **gasto total mensual** (suma de `TOTAL`), agregado por **`FECHA_FORMALIZACION`**.
 
 Los datos abarcan **53 meses** (de 202201 a 202605) e incluyen **483,889 órdenes** consolidadas desde 53 archivos CSV mensuales.
 
@@ -110,7 +110,7 @@ El SARIMA seleccionado automáticamente por AIC fue **SARIMA(1, 0, 0)x(0, 1, 0, 
 
 ![Comparación en el holdout](../figuras/09_holdout_real_vs_modelos.png)
 
-![Error por mes](../figuras/11_error_por_mes.png)
+![Error por mes](../figuras/10_backtest_error_por_mes.png)
 
 _El heatmap confirma el diagnóstico: **enero concentra el grueso del error porcentual** en todos los modelos (denominador casi-cero), mientras que el resto del año es mucho más predecible. Por eso WAPE/MASE describen mejor el valor real del modelo para la planificación presupuestal agregada._
 
@@ -148,7 +148,7 @@ Con **Ensemble** reentrenado sobre toda la serie se pronostican los próximos **
 | 2026-10 | 200,796,257 | 157,645,482 | 243,947,032 |
 | 2026-11 | 229,712,994 | 211,590,099 | 247,835,890 |
 
-![Pronóstico final](../figuras/10_pronostico_final.png)
+![Pronóstico final](../figuras/11_pronostico_final.png)
 
 _Se proyecta un gasto acumulado de **S/ 1,038 millones** en los próximos 6 meses. El pronóstico reproduce el patrón estacional histórico (meses altos y bajos) y el intervalo de confianza refleja la incertidumbre: cuanto más ancho, mayor variabilidad esperada. Conviene recalibrar el modelo a medida que ingresen nuevos meses de datos._
 

@@ -19,17 +19,13 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
-from . import config, modelos
+from .. import config, figuras
+from . import f06_modelado as modelos
 
 logger = logging.getLogger(__name__)
-
-
-def _millones(x, _pos=None) -> str:
-    return f"{x / 1e6:,.1f}M"
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +226,7 @@ def backtesting_jerarquico(
     Devuelve (tabla_metricas_media, residuos) con la misma estructura que el
     backtesting agregado, para concatenar en la comparación y para los intervalos.
     """
-    from . import serie_temporal
+    from . import f03_serie_temporal as serie_temporal
 
     h = h or config.MESES_HOLDOUT
     n_origenes = n_origenes or config.BACKTEST_N_ORIGENES
@@ -298,7 +294,7 @@ def comparar_granularidades(
     tamaño muestral) rompe el techo del error? Devuelve una tabla de métricas
     medias por enfoque. Si algo falla, devuelve lo que haya podido calcular.
     """
-    from . import serie_temporal
+    from . import f03_serie_temporal as serie_temporal
 
     h = h or config.MESES_HOLDOUT
     n_origenes = min(n_origenes or config.BACKTEST_N_ORIGENES, 4)  # acotar coste
@@ -368,10 +364,7 @@ def figura_error_por_mes(errores_mes: pd.DataFrame, mejor: str) -> str:
     ax.set_title("Error porcentual medio (APE) por mes — backtesting")
     fig.colorbar(im, ax=ax, label="APE (%)")
     fig.tight_layout()
-    ruta = config.DIR_FIGURAS / "11_error_por_mes.png"
-    fig.savefig(ruta)
-    plt.close(fig)
-    return "../figuras/11_error_por_mes.png"
+    return figuras.guardar(fig, "backtest_error_por_mes")
 
 
 # ---------------------------------------------------------------------------
@@ -388,12 +381,9 @@ def figura_holdout(train: pd.Series, test: pd.Series, predicciones: pd.DataFrame
     ax.set_title("Comparación en el holdout: real vs. modelos")
     ax.set_ylabel("Gasto mensual (S/)")
     ax.set_xlabel("Mes")
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_millones))
+    ax.yaxis.set_major_formatter(figuras.formato_millones())
     ax.legend(fontsize=8, ncol=2)
-    ruta = config.DIR_FIGURAS / "09_holdout_real_vs_modelos.png"
-    fig.savefig(ruta)
-    plt.close(fig)
-    return "../figuras/09_holdout_real_vs_modelos.png"
+    return figuras.guardar(fig, "holdout_real_vs_modelos")
 
 
 def figura_pronostico(serie: pd.Series, pronostico: pd.DataFrame, mejor: str) -> str:
@@ -413,12 +403,9 @@ def figura_pronostico(serie: pd.Series, pronostico: pd.DataFrame, mejor: str) ->
     ax.set_title("Histórico vs. pronóstico del gasto mensual")
     ax.set_ylabel("Gasto mensual (S/)")
     ax.set_xlabel("Mes")
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_millones))
+    ax.yaxis.set_major_formatter(figuras.formato_millones())
     ax.legend(fontsize=9)
-    ruta = config.DIR_FIGURAS / "10_pronostico_final.png"
-    fig.savefig(ruta)
-    plt.close(fig)
-    return "../figuras/10_pronostico_final.png"
+    return figuras.guardar(fig, "pronostico_final")
 
 
 # ---------------------------------------------------------------------------

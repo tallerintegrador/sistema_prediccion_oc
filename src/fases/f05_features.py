@@ -25,7 +25,7 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 
-from . import config
+from .. import config
 
 
 @lru_cache(maxsize=None)
