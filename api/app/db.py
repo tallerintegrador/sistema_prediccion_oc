@@ -21,6 +21,16 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+# Carga variables desde un archivo .env si existe (desarrollo local y ETL).
+# En despliegue (Render/Docker) las variables vienen del entorno y load_dotenv
+# no encuentra .env: es un no-op inofensivo.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ModuleNotFoundError:  # python-dotenv es opcional
+    pass
+
 # api/app/db.py -> parents[2] = raíz del proyecto.
 RAIZ_PROYECTO: Path = Path(__file__).resolve().parents[2]
 _RUTA_SQLITE = (RAIZ_PROYECTO / "artifacts" / "sistema.db").as_posix()

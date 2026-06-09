@@ -16,6 +16,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+# Carga .env si existe (para ALLOWED_ORIGINS en local). No-op en despliegue.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ModuleNotFoundError:  # python-dotenv es opcional
+    pass
+
 # api/app/config.py  ->  parents[2] = raíz del proyecto SistemaPrediccionOC
 RAIZ_PROYECTO: Path = Path(__file__).resolve().parents[2]
 

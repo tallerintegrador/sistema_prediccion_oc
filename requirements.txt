@@ -34,3 +34,4 @@ uvicorn==0.47.0          # servidor ASGI para levantar el API
 # --- Persistencia (base de datos) ---
 SQLAlchemy>=2.0,<3.0     # ORM/engine; el ETL y el API usan el mismo motor
 psycopg2-binary>=2.9     # driver de PostgreSQL (solo necesario en Docker/Postgres)
+python-dotenv>=1.0       # carga DATABASE_URL desde .env al correr el ETL en local
