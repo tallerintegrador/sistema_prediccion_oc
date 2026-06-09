@@ -1,0 +1,50 @@
+# Docker Compose — levanta base de datos (Postgres) + API (FastAPI) + web (Nginx).
+# Uso:  cp .env.example .env  &&  docker compose up --build
+#       web -> http://localhost:5173   ·   API -> http://localhost:8000/docs
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sistema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sistema}
+      POSTGRES_DB: ${POSTGRES_DB:-sistema_oc}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # host 5438 -> contenedor 5432 (clientes externos se conectan a localhost:5438)
+      - "${DB_HOST_PORT:-5438}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sistema} -d ${POSTGRES_DB:-sistema_oc}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://sistema:sistema@db:5432/sistema_oc}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost}
+      # Postgres local arranca vacío -> cargar artefactos en el primer arranque.
+      RUN_ETL_ON_BOOT: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+volumes:
+  pgdata:

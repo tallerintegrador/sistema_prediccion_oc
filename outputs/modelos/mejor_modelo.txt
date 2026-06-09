@@ -1,1 +1,0 @@
-Mejor modelo del Módulo A: SARIMA

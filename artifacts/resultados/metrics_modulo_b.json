@@ -1,0 +1,167 @@
+{
+  "n_ordenes": 483692,
+  "n_entidades": 2336,
+  "n_proveedores": 3563,
+  "umbral_fraccionamiento": 100000.0,
+  "tolerancia_igv": 0.005,
+  "precision_at_k": [
+    {
+      "k": 20,
+      "precision": 1.0
+    },
+    {
+      "k": 50,
+      "precision": 1.0
+    },
+    {
+      "k": 100,
+      "precision": 1.0
+    }
+  ],
+  "synthetic_injection_recall": [
+    {
+      "tipo": "IGV inconsistente",
+      "n": 200,
+      "recall_alerta": 0.74,
+      "recall_top1pct": 0.12,
+      "puntaje_mediano": 0.964
+    },
+    {
+      "tipo": "Monto atípico",
+      "n": 200,
+      "recall_alerta": 0.28,
+      "recall_top1pct": 0.12,
+      "puntaje_mediano": 0.896
+    },
+    {
+      "tipo": "Posible fraccionamiento",
+      "n": 198,
+      "recall_alerta": 1.0,
+      "recall_top1pct": 0.0,
+      "puntaje_mediano": 0.983
+    }
+  ],
+  "recall_global": {
+    "recall": 0.67,
+    "n": 598
+  },
+  "concordance": {
+    "labels": [
+      "Isolation Forest",
+      "Red",
+      "Reglas"
+    ],
+    "jaccard": [
+      [
+        1.0,
+        0.2,
+        0.16
+      ],
+      [
+        0.2,
+        1.0,
+        0.08
+      ],
+      [
+        0.16,
+        0.08,
+        1.0
+      ]
+    ],
+    "interseccion_triple": 517,
+    "top_1pct_size": 4836
+  },
+  "network_stats": {
+    "nodos": 5899,
+    "aristas": 189825,
+    "comunidades": 15,
+    "proveedores_cautivos": 309,
+    "grado_prov_max": 720,
+    "grado_ent_max": 1214
+  },
+  "alertas": {
+    "alto": 4837,
+    "medio": 19348,
+    "total": 24185
+  },
+  "level_distribution": {
+    "medio": 19348,
+    "alto": 4837
+  },
+  "type_distribution": {
+    "IGV inconsistente": 10850,
+    "Anomalía de red": 5873,
+    "Concentración de proveedor": 3662,
+    "Posible fraccionamiento": 1499,
+    "Patrón temporal": 1227,
+    "Monto atípico": 1074
+  },
+  "risk_score_histogram": {
+    "bin_edges": [
+      0.0,
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8,
+      0.85,
+      0.9,
+      0.95,
+      1.0
+    ],
+    "counts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      24,
+      24161
+    ]
+  },
+  "score_stats": {
+    "SCORE_IF": {
+      "min": 0.8487,
+      "mediana": 0.9634,
+      "media": 0.9542,
+      "max": 1.0
+    },
+    "SCORE_RED": {
+      "min": 0.0006,
+      "mediana": 0.9857,
+      "media": 0.9439,
+      "max": 1.0
+    },
+    "PUNTAJE_RIESGO": {
+      "min": 0.95,
+      "mediana": 0.975,
+      "media": 0.975,
+      "max": 1.0
+    }
+  },
+  "alertas_en_csv": 24185
+}

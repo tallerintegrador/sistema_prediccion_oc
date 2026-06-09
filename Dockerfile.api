@@ -1,0 +1,18 @@
+# Imagen del API (FastAPI) + ETL. Liviana: sin la pila pesada de ML.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Dependencias del sistema mínimas para psycopg2-binary/pyarrow ya vienen en wheels.
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt
+
+# Código necesario en tiempo de ejecución (API, ETL y artefactos del ML).
+COPY api ./api
+COPY ml ./ml
+COPY artifacts ./artifacts
+COPY scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
+RUN chmod +x ./scripts/docker-entrypoint.sh
+
+EXPOSE 8000
+CMD ["./scripts/docker-entrypoint.sh"]

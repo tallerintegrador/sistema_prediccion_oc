@@ -1,0 +1,20 @@
+# Blueprint de Render para el API (FastAPI) — plan free, vía Docker.
+# Despliegue: Render Dashboard -> New -> Blueprint -> selecciona este repo.
+# Render lee Dockerfile.api (que ya incluye api/, ml/ y artifacts/).
+#
+# Las variables marcadas "sync: false" NO se guardan en el repo: se cargan a mano
+# en el dashboard de Render (Environment) para no exponer la contraseña de la BD.
+services:
+  - type: web
+    name: sistema-oc-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Cadena de Neon, con +psycopg2 y ?sslmode=require (igual que en .env).
+      - key: DATABASE_URL
+        sync: false
+      # URL del frontend en Vercel, p.ej. https://tu-app.vercel.app
+      - key: ALLOWED_ORIGINS
+        sync: false
