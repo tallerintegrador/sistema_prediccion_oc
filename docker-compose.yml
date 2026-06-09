@@ -27,6 +27,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://sistema:sistema@db:5432/sistema_oc}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost}
+      # Postgres local arranca vacío -> cargar artefactos en el primer arranque.
+      RUN_ETL_ON_BOOT: "1"
     depends_on:
       db:
         condition: service_healthy

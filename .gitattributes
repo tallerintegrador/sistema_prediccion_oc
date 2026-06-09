@@ -1,0 +1,4 @@
+# Los scripts de shell deben ir con saltos LF: si se commitean con CRLF (Windows),
+# el contenedor Linux falla con "bad interpreter" al ejecutar el entrypoint.
+*.sh text eol=lf
+scripts/docker-entrypoint.sh text eol=lf
