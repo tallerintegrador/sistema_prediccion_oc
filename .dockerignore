@@ -1,0 +1,11 @@
+# Excluye del contexto de build lo pesado o local.
+venv/
+**/__pycache__/
+*.pyc
+.git/
+.gitignore
+web/node_modules/
+web/dist/
+artifacts/sistema.db
+data/
+notebooks/

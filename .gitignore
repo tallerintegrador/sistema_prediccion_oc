@@ -5,10 +5,16 @@ __pycache__/
 venv/
 .ipynb_checkpoints/
 
-# Artefactos regenerables grandes (se reconstruyen con `python main.py`)
-outputs/resultados/*.parquet
-outputs/modelos/*.pkl
-outputs/modelos/*.json
+# Artefactos regenerables grandes (se reconstruyen con `python -m ml.run_a` / `run_b`)
+artifacts/resultados/*.parquet
+artifacts/modelos/*.pkl
+artifacts/modelos/*.json
+
+# Base de datos local (la regenera `python -m ml.load_to_db`)
+artifacts/sistema.db
+
+# Docker / entornos
+.env
 
 # Sistema
 .DS_Store
