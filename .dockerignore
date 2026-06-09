@@ -1,4 +1,6 @@
 # Excluye del contexto de build lo pesado o local.
+.env
+.env.*
 venv/
 **/__pycache__/
 *.pyc
@@ -9,3 +11,6 @@ web/dist/
 artifacts/sistema.db
 data/
 notebooks/
+# El API en Render salta el ETL -> no necesita el dataset pesado ni los modelos.
+artifacts/resultados/*.parquet
+artifacts/modelos/*.pkl
